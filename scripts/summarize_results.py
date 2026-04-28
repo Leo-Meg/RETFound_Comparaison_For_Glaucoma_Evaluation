@@ -4,21 +4,44 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from retfound_eval.config import default_results_dir, resolve_splits
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Resume les resultats RETFound glaucome.")
-    parser.add_argument("--results-dir", default="results/glaucoma_matrix")
+    parser.add_argument("--results-dir", default=None)
+    parser.add_argument(
+        "--external-only",
+        action="store_true",
+        help="Resume uniquement une campagne sans diagonales.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Utilise le dossier de resultats correspondant au mode train+val+test.",
+    )
+    parser.add_argument(
+        "--test-only",
+        action="store_true",
+        help="Utilise le dossier de resultats correspondant au mode test uniquement.",
+    )
     parser.add_argument("--output", default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    results_dir = Path(args.results_dir)
+    _, split_mode = resolve_splits(use_all=args.all, test_only=args.test_only)
+    results_dir = Path(
+        args.results_dir or default_results_dir(args.external_only, split_mode)
+    )
     metric_files = sorted(results_dir.glob("train-*__eval-*/metrics.csv"))
     if not metric_files:
         raise SystemExit(f"Aucun fichier metrics.csv trouve dans {results_dir}")

@@ -22,40 +22,39 @@ Les deux datasets n'utilisent pas exactement les memes noms de dossiers, mais il
 | 1 | Suspect / precoce | `bearly_glaucoma` | `bsuspectglaucoma` |
 | 2 | Glaucome confirme / avance | `cadvanced_glaucoma` | `cglaucoma` |
 
-Cette harmonisation est un **choix d'evaluation** necessaire pour comparer les checkpoints entre datasets differents.
+Cette harmonisation est un choix d'evaluation necessaire pour comparer les checkpoints entre datasets differents.
 
 ## Structure du projet
 
 ```text
 RETFound_Comparaison_For_Glaucoma_Evaluation/
-├── README.md
-├── requirements.txt
-├── check/
-├── dataset/
-├── results/
-├── retfound_eval/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── data.py
-│   ├── device.py
-│   ├── evaluate.py
-│   ├── metrics.py
-│   ├── model.py
-│   └── plots.py
-└── scripts/
-    ├── prepare_local_assets.py
-    ├── inspect_glaucoma_datasets.py
-    ├── evaluate_pair.py
-    ├── evaluate_matrix.py
-    ├── summarize_results.py
-    └── make_markdown_report.py
+|-- README.md
+|-- requirements.txt
+|-- check/
+|-- dataset/
+|-- results/
+|-- retfound_eval/
+|   |-- __init__.py
+|   |-- config.py
+|   |-- data.py
+|   |-- device.py
+|   |-- evaluate.py
+|   |-- metrics.py
+|   |-- model.py
+|   `-- plots.py
+`-- scripts/
+    |-- prepare_local_assets.py
+    |-- inspect_glaucoma_datasets.py
+    |-- evaluate_pair.py
+    |-- evaluate_matrix.py
+    |-- summarize_results.py
+    `-- make_markdown_report.py
 ```
 
 ## Prerequis
 
 - Python 3.10 ou plus recent recommande
-- checkpoints RETFound au format `.pth`
-- datasets organises en `train/`, `val/`, `test/`
+- acces internet pour telecharger les assets Google Drive
 
 Installation :
 
@@ -63,41 +62,29 @@ Installation :
 python3 -m pip install -r requirements.txt
 ```
 
-Sous Windows, remplacez `python3` par `py` ou `python` selon votre environnement.
-
 ## Preparation des assets locaux
 
-Dans ce workspace, les donnees sources existent deja dans :
+Le projet ne copie plus les datasets et checkpoints depuis un dossier voisin. Il telecharge maintenant directement les assets dans `dataset/` et `check/` a partir des liens Google Drive fournis.
 
-- `../dataset-glauc/`
-- `../check-glauc/`
-
-Pour copier ou lier automatiquement ces assets dans le projet :
+Commande standard :
 
 ```bash
 python3 scripts/prepare_local_assets.py
 ```
 
-Modes disponibles :
+Ce script :
+
+- telecharge et dezippe `Glaucoma_fundus` dans `dataset/Glaucoma_fundus`
+- telecharge et dezippe `PAPILA` dans `dataset/PAPILA`
+- telecharge le checkpoint de `Glaucoma_fundus` puis le renomme en `checkpoint-best-Glaucoma_fundus.pth`
+- telecharge le checkpoint de `PAPILA` puis le renomme en `checkpoint-best-PAPILA.pth`
+
+Options utiles :
 
 ```bash
-python3 scripts/prepare_local_assets.py --mode copy
-python3 scripts/prepare_local_assets.py --mode symlink
-python3 scripts/prepare_local_assets.py --mode auto
-```
-
-Comportement :
-
-- `auto` : tente un symlink sur macOS/Linux, puis bascule en copie si necessaire
-- `copy` : plus portable, recommande sous Windows
-- `symlink` : pratique si vous voulez eviter de dupliquer les donnees
-
-Vous pouvez aussi forcer des chemins differents :
-
-```bash
-python3 scripts/prepare_local_assets.py \
-  --source-dataset-dir ../dataset-glauc \
-  --source-check-dir ../check-glauc
+python3 scripts/prepare_local_assets.py --force
+python3 scripts/prepare_local_assets.py --skip-datasets
+python3 scripts/prepare_local_assets.py --skip-checkpoints
 ```
 
 ## Utilisation
@@ -105,7 +92,7 @@ python3 scripts/prepare_local_assets.py \
 Placez-vous dans le dossier du projet :
 
 ```bash
-cd /Users/megretleo/scr/2026/retfound-glaucome/RETFound_Comparaison_For_Glaucoma_Evaluation
+cd /Users/megretleo/scr/2026/RETFound_Comparaison_For_Glaucoma_Evaluation
 ```
 
 ### 1. Inspecter les datasets
@@ -116,49 +103,104 @@ python3 scripts/inspect_glaucoma_datasets.py
 
 ### 2. Evaluer une paire source -> cible
 
-Exemple : checkpoint fine-tune sur `Glaucoma_fundus`, evalue sur `PAPILA` :
+Exemple de comparaison externe sur tous les splits fusionnes :
 
 ```bash
 python3 scripts/evaluate_pair.py \
   --train-dataset Glaucoma_fundus \
   --eval-dataset PAPILA \
+  --all \
   --batch-size 16
 ```
 
-### 3. Lancer toute la matrice 2 x 2
-
-Avec diagonales :
+Exemple en test uniquement :
 
 ```bash
-python3 scripts/evaluate_matrix.py --batch-size 16
+python3 scripts/evaluate_pair.py \
+  --train-dataset PAPILA \
+  --eval-dataset PAPILA \
+  --test-only \
+  --batch-size 16
 ```
 
-Validation externe uniquement :
+### 3. Lancer la matrice complete selon les deux scenarios metier
+
+#### Scenario A - Rapport de comparaison externe uniquement
+
+Objectif : comparer uniquement les validations croisees entre datasets differents, en fusionnant `train + val + test`.
+
+Commande :
 
 ```bash
-python3 scripts/evaluate_matrix.py --external-only --batch-size 16
+python3 scripts/evaluate_matrix.py --external-only --all --batch-size 16
 ```
 
-### 4. Regenerer le tableau resume
+Puis regeneration du resume et du rapport :
 
 ```bash
-python3 scripts/summarize_results.py --results-dir results/glaucoma_matrix
+python3 scripts/summarize_results.py --external-only --all
+python3 scripts/make_markdown_report.py --external-only --all
 ```
 
-### 5. Generer un rapport Markdown
+Ce scenario cree par defaut :
+
+```text
+results/glaucoma_matrix__external_only__all/
+```
+
+#### Scenario B - Rapport de comparaison externe et interne
+
+Objectif : comparer a la fois les diagonales internes et les validations externes, mais uniquement sur le split `test`.
+
+Commande :
 
 ```bash
-python3 scripts/make_markdown_report.py \
-  --summary results/glaucoma_matrix/summary_metrics.csv \
-  --output results/glaucoma_matrix/report.md
+python3 scripts/evaluate_matrix.py --test-only --batch-size 16
 ```
+
+Puis regeneration du resume et du rapport :
+
+```bash
+python3 scripts/summarize_results.py --test-only
+python3 scripts/make_markdown_report.py --test-only
+```
+
+Ce scenario cree par defaut :
+
+```text
+results/glaucoma_matrix__internal_external__test_only/
+```
+
+### 4. Utiliser des chemins de sortie personnalises
+
+Si besoin, vous pouvez toujours forcer un dossier de sortie specifique :
+
+```bash
+python3 scripts/evaluate_matrix.py --external-only --all --output-dir results/mon_run
+python3 scripts/summarize_results.py --results-dir results/mon_run
+python3 scripts/make_markdown_report.py --summary results/mon_run/summary_metrics.csv --output results/mon_run/report.md
+```
+
+## Sens des nouveaux modes
+
+Le projet distingue maintenant explicitement deux usages :
+
+- `--all` : fusionne `train`, `val` et `test` pour evaluer sur l'ensemble complet du dataset cible
+- `--test-only` : n'utilise que `test`, pour une comparaison plus stricte et plus proche d'une evaluation finale
+
+En pratique :
+
+- `--external-only --all` correspond au rapport de comparaison externe uniquement que tu souhaites
+- `--test-only` sans `--external-only` correspond au rapport de comparaison externe et interne en ne gardant que les fichiers de test
+
+Les options `--all` et `--test-only` sont mutuellement exclusives.
 
 ## Sorties produites
 
 Pour chaque paire evaluee, le projet cree un dossier :
 
 ```text
-results/glaucoma_matrix/train-{SOURCE}__eval-{TARGET}/
+results/.../train-{SOURCE}__eval-{TARGET}/
 ```
 
 Contenu :
@@ -169,9 +211,15 @@ Contenu :
 - `confusion_matrix.png` : matrice de confusion normalisee
 - `roc_curves.png` : courbes ROC one-vs-rest par classe
 
-Le fichier global :
+Au niveau de la campagne :
 
-- `results/glaucoma_matrix/summary_metrics.csv`
+- `summary_metrics.csv`
+- `report.md`
+
+Les metriques incluent maintenant aussi :
+
+- `split_mode` : `all`, `test_only` ou `custom`
+- `comparison_scope` : `external_only` ou `internal_external`
 
 ## Notes techniques
 
@@ -195,7 +243,6 @@ Le fichier global :
 ### Windows
 
 - preferez `python scripts/...` ou `py scripts/...`
-- le mode `copy` est le plus fiable pour `prepare_local_assets.py`
 - si l'ouverture multi-processus pose probleme, utilisez `--num-workers 0`
 
 ### Sans GPU
@@ -203,14 +250,14 @@ Le fichier global :
 Le projet fonctionne integralement sur CPU, avec un temps d'evaluation plus long. Aucun changement de code n'est necessaire :
 
 ```bash
-python3 scripts/evaluate_matrix.py --device cpu
+python3 scripts/evaluate_matrix.py --test-only --device cpu
 ```
 
 ## Hypotheses importantes
 
 - Les checkpoints locaux correspondent bien a une tete de classification a 3 classes.
 - L'alignement `precoce <-> suspect` et `avance <-> glaucome` est suppose acceptable pour une comparaison cross-dataset.
-- Les dossiers `train`, `val`, `test` sont fusionnes par defaut lors de l'evaluation, sauf si vous precisez `--splits`.
+- Les dossiers `train`, `val`, `test` sont attendus dans les archives telechargees.
 
 ## Reference scientifique
 

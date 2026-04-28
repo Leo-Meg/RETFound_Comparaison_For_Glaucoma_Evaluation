@@ -9,9 +9,10 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 
-from retfound_eval.config import SPLITS, dataset_names
+from retfound_eval.config import default_results_dir, dataset_names, resolve_splits
 from retfound_eval.evaluate import run_evaluation
 
 
@@ -28,8 +29,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--check-dir", default="check")
-    parser.add_argument("--output-dir", default="results/glaucoma_matrix")
-    parser.add_argument("--splits", nargs="+", default=list(SPLITS))
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--splits", nargs="+", default=None)
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Fusionne train+val+test pour l'evaluation.",
+    )
+    parser.add_argument(
+        "--test-only",
+        action="store_true",
+        help="Utilise uniquement le split test pour l'evaluation.",
+    )
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--device", default="auto")
@@ -39,7 +50,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_dir = Path(args.output_dir)
+    splits, split_mode = resolve_splits(
+        use_all=args.all,
+        test_only=args.test_only,
+        explicit_splits=args.splits,
+    )
+    output_dir = Path(
+        args.output_dir or default_results_dir(args.external_only, split_mode)
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     all_metrics = []
 
@@ -55,11 +73,13 @@ def main() -> None:
                 repo_root=args.repo_root,
                 check_dir=args.check_dir,
                 output_dir=output_dir,
-                splits=tuple(args.splits),
+                splits=splits,
                 batch_size=args.batch_size,
                 num_workers=args.num_workers,
                 device_name=args.device,
                 save_plots=not args.no_plots,
+                split_mode=split_mode,
+                external_only=args.external_only,
             )
             all_metrics.append(result["metrics"])
 
@@ -69,6 +89,11 @@ def main() -> None:
 
     print("\nMatrice terminee")
     print(f"Resume: {summary_path}")
+    print(f"Mode splits: {split_mode}")
+    print(
+        "Portee: "
+        + ("comparaison externe uniquement" if args.external_only else "comparaison interne + externe")
+    )
     if not summary.empty:
         columns = [
             "train_dataset",

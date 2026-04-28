@@ -44,6 +44,8 @@ def run_evaluation(
     num_workers: int = 0,
     device_name: str = "auto",
     save_plots: bool = True,
+    split_mode: str = "all",
+    external_only: bool = False,
 ) -> dict[str, Any]:
     """Evaluate one source checkpoint on one target dataset."""
 
@@ -108,6 +110,8 @@ def run_evaluation(
             "checkpoint": str(ckpt),
             "device": str(device),
             "splits": ",".join(splits),
+            "split_mode": split_mode,
+            "comparison_scope": "external_only" if external_only else "internal_external",
         }
     )
 

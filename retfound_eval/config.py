@@ -79,3 +79,36 @@ def get_dataset_config(name: str) -> DatasetConfig:
 def checkpoint_path(check_dir: str | Path, dataset_name: str) -> Path:
     cfg = get_dataset_config(dataset_name)
     return Path(check_dir) / cfg.checkpoint_name
+
+
+def resolve_splits(
+    use_all: bool = False,
+    test_only: bool = False,
+    explicit_splits: list[str] | tuple[str, ...] | None = None,
+) -> tuple[tuple[str, ...], str]:
+    if use_all and test_only:
+        raise ValueError("Les options --all et --test-only sont mutuellement exclusives.")
+
+    if explicit_splits:
+        splits = tuple(explicit_splits)
+        split_mode = "custom"
+    elif test_only:
+        splits = ("test",)
+        split_mode = "test_only"
+    else:
+        splits = SPLITS
+        split_mode = "all"
+
+    invalid = [split for split in splits if split not in SPLITS]
+    if invalid:
+        valid = ", ".join(SPLITS)
+        raise ValueError(
+            f"Splits invalides: {', '.join(invalid)}. Choix valides: {valid}"
+        )
+
+    return splits, split_mode
+
+
+def default_results_dir(external_only: bool, split_mode: str) -> str:
+    scope = "external_only" if external_only else "internal_external"
+    return f"results/glaucoma_matrix__{scope}__{split_mode}"
