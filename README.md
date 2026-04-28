@@ -4,7 +4,7 @@
 
 ## Objectif
 
-Ce projet reprend l'organisation du dossier d'exemple `RETFound_Comparaison_For_Diabetic_Retinopathy_Evaluation`, mais l'adapte a une evaluation glaucome a **2 checkpoints x 2 datasets** :
+Ce projet reprend l'organisation du précédent Github `RETFound_Comparaison_For_Diabetic_Retinopathy_Evaluation`, mais l'adapte a une evaluation glaucome a **2 checkpoints x 2 datasets** :
 
 - checkpoint fine-tune sur `Glaucoma_fundus`
 - checkpoint fine-tune sur `PAPILA`
@@ -64,7 +64,7 @@ python3 -m pip install -r requirements.txt
 
 ## Preparation des assets locaux
 
-Le projet ne copie plus les datasets et checkpoints depuis un dossier voisin. Il telecharge maintenant directement les assets dans `dataset/` et `check/` a partir des liens Google Drive fournis.
+Au besoin, on telecharge directement les assets dans `dataset/` et `check/` a partir des liens Google Drive provenant de [RETFound/BENCHMARK.md](https://github.com/rmaphoh/RETFound/blob/dbbddb89360a35ef264ee363a56054245b00c45b/BENCHMARK.md).
 
 Commande standard :
 
@@ -87,14 +87,6 @@ python3 scripts/prepare_local_assets.py --skip-datasets
 python3 scripts/prepare_local_assets.py --skip-checkpoints
 ```
 
-## Utilisation
-
-Placez-vous dans le dossier du projet :
-
-```bash
-cd /Users/megretleo/scr/2026/RETFound_Comparaison_For_Glaucoma_Evaluation
-```
-
 ### 1. Inspecter les datasets
 
 ```bash
@@ -113,19 +105,9 @@ python3 scripts/evaluate_pair.py \
   --batch-size 16
 ```
 
-Exemple en test uniquement :
+### 3. Lancer la matrice complete selon les deux types de comparaison
 
-```bash
-python3 scripts/evaluate_pair.py \
-  --train-dataset PAPILA \
-  --eval-dataset PAPILA \
-  --test-only \
-  --batch-size 16
-```
-
-### 3. Lancer la matrice complete selon les deux scenarios metier
-
-#### Scenario A - Rapport de comparaison externe uniquement
+#### A - Rapport de comparaison externe uniquement
 
 Objectif : comparer uniquement les validations croisees entre datasets differents, en fusionnant `train + val + test`.
 
@@ -142,13 +124,13 @@ python3 scripts/summarize_results.py --external-only --all
 python3 scripts/make_markdown_report.py --external-only --all
 ```
 
-Ce scenario cree par defaut :
+On cree par defaut :
 
 ```text
 results/glaucoma_matrix__external_only__all/
 ```
 
-#### Scenario B - Rapport de comparaison externe et interne
+#### B - Rapport de comparaison externe et interne
 
 Objectif : comparer a la fois les diagonales internes et les validations externes, mais uniquement sur le split `test`.
 
@@ -165,7 +147,7 @@ python3 scripts/summarize_results.py --test-only
 python3 scripts/make_markdown_report.py --test-only
 ```
 
-Ce scenario cree par defaut :
+On cree par defaut :
 
 ```text
 results/glaucoma_matrix__internal_external__test_only/
@@ -181,16 +163,16 @@ python3 scripts/summarize_results.py --results-dir results/mon_run
 python3 scripts/make_markdown_report.py --summary results/mon_run/summary_metrics.csv --output results/mon_run/report.md
 ```
 
-## Sens des nouveaux modes
+## Différent mode d'analyse
 
-Le projet distingue maintenant explicitement deux usages :
+Le projet distingue deux usages :
 
 - `--all` : fusionne `train`, `val` et `test` pour evaluer sur l'ensemble complet du dataset cible
 - `--test-only` : n'utilise que `test`, pour une comparaison plus stricte et plus proche d'une evaluation finale
 
 En pratique :
 
-- `--external-only --all` correspond au rapport de comparaison externe uniquement que tu souhaites
+- `--external-only --all` correspond au rapport de comparaison externe uniquement
 - `--test-only` sans `--external-only` correspond au rapport de comparaison externe et interne en ne gardant que les fichiers de test
 
 Les options `--all` et `--test-only` sont mutuellement exclusives.
@@ -211,15 +193,6 @@ Contenu :
 - `confusion_matrix.png` : matrice de confusion normalisee
 - `roc_curves.png` : courbes ROC one-vs-rest par classe
 
-Au niveau de la campagne :
-
-- `summary_metrics.csv`
-- `report.md`
-
-Les metriques incluent maintenant aussi :
-
-- `split_mode` : `all`, `test_only` ou `custom`
-- `comparison_scope` : `external_only` ou `internal_external`
 
 ## Notes techniques
 
@@ -252,12 +225,6 @@ Le projet fonctionne integralement sur CPU, avec un temps d'evaluation plus long
 ```bash
 python3 scripts/evaluate_matrix.py --test-only --device cpu
 ```
-
-## Hypotheses importantes
-
-- Les checkpoints locaux correspondent bien a une tete de classification a 3 classes.
-- L'alignement `precoce <-> suspect` et `avance <-> glaucome` est suppose acceptable pour une comparaison cross-dataset.
-- Les dossiers `train`, `val`, `test` sont attendus dans les archives telechargees.
 
 ## Reference scientifique
 
