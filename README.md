@@ -226,6 +226,18 @@ Le projet fonctionne integralement sur CPU, avec un temps d'evaluation plus long
 python3 scripts/evaluate_matrix.py --test-only --device cpu
 ```
 
+## Conclusion generale
+
+Les deux rapports conduisent a une conclusion principale claire : les checkpoints RETFound fine-tunes sur un dataset de glaucome conservent de bonnes performances sur leur domaine d'origine, mais generalisent difficilement vers l'autre dataset.
+
+- En evaluation interne sur le split `test`, le checkpoint entraine sur `Glaucoma_fundus` est nettement le plus performant sur son propre dataset, avec un composite de `0.8252` et un AUROC de `0.9428`.
+- Le checkpoint entraine sur `PAPILA` reste correct sur son propre domaine, mais a un niveau plus modeste, avec un composite de `0.5987` et un AUROC de `0.8493`.
+- En evaluation externe, le transfert `PAPILA -> Glaucoma_fundus` est systematiquement meilleur que `Glaucoma_fundus -> PAPILA`, a la fois sur le rapport `external-only --all` (composite `0.3209` vs `0.2872`) et sur le rapport `test-only` (composite `0.3281` vs `0.2784`).
+- Cette asymetrie suggere que le checkpoint fine-tune sur `PAPILA` apprend des representations un peu plus transferables, tandis que `PAPILA` semble etre la cible la plus difficile pour une evaluation croisee.
+- L'ecart important entre validation interne et validation externe montre enfin que l'harmonisation des classes ne suffit pas a eliminer le decalage de domaine entre les deux jeux de donnees.
+
+En pratique, ces resultats indiquent que RETFound fine-tune sur un seul dataset peut etre efficace localement, mais qu'une utilisation plus robuste en contexte multi-source demanderait idealement soit un fine-tuning conjoint sur plusieurs cohortes, soit une strategie de domain adaptation, soit une calibration et une validation externe supplementaires avant toute interpretation forte.
+
 ## Reference scientifique
 
 > Zhou, Y., et al. *A foundation model for generalizable disease detection from retinal images.* Nature, 2023. DOI: `10.1038/s41586-023-06555-x`
