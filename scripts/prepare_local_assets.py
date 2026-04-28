@@ -4,8 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import html
+import http.cookiejar
+import re
 import shutil
 import tempfile
+import urllib.parse
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -67,18 +72,120 @@ def remove_existing(path: Path) -> None:
         shutil.rmtree(path)
 
 
+def _is_download_response(response: urllib.request.addinfourl) -> bool:
+    content_disposition = response.headers.get("Content-Disposition", "")
+    content_type = response.headers.get("Content-Type", "")
+    if "attachment" in content_disposition.lower():
+        return True
+    return "text/html" not in content_type.lower()
+
+
+def _write_response_to_file(
+    response: urllib.request.addinfourl,
+    destination: Path,
+    chunk_size: int = 1024 * 1024,
+) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("wb") as handle:
+        while True:
+            chunk = response.read(chunk_size)
+            if not chunk:
+                break
+            handle.write(chunk)
+
+
+def _extract_confirm_from_cookies(cookie_jar: http.cookiejar.CookieJar) -> str | None:
+    for cookie in cookie_jar:
+        if cookie.name.startswith("download_warning"):
+            return cookie.value
+    return None
+
+
+def _extract_confirm_form(html_text: str) -> tuple[str, dict[str, str]] | None:
+    form_match = re.search(
+        r'<form[^>]+id="download-form"[^>]+action="([^"]+)"[^>]*>(.*?)</form>',
+        html_text,
+        flags=re.DOTALL,
+    )
+    if not form_match:
+        return None
+
+    action = html.unescape(form_match.group(1))
+    form_body = form_match.group(2)
+    inputs: dict[str, str] = {}
+    for input_match in re.finditer(r"<input\b[^>]*>", form_body):
+        input_tag = input_match.group(0)
+        name_match = re.search(r'name="([^"]+)"', input_tag)
+        if not name_match:
+            continue
+        value_match = re.search(r'value="([^"]*)"', input_tag)
+        inputs[name_match.group(1)] = html.unescape(value_match.group(1) if value_match else "")
+
+    if not inputs:
+        return None
+    return action, inputs
+
+
+def _download_with_google_drive_fallback(file_id: str, destination: Path) -> None:
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    base_url = "https://drive.google.com/uc?export=download"
+    initial_url = f"{base_url}&id={urllib.parse.quote(file_id)}"
+
+    with opener.open(initial_url) as response:
+        if _is_download_response(response):
+            _write_response_to_file(response, destination)
+            return
+        html_text = response.read().decode("utf-8", errors="ignore")
+
+    confirm_token = _extract_confirm_from_cookies(cookie_jar)
+    if confirm_token:
+        confirm_url = (
+            f"{base_url}&id={urllib.parse.quote(file_id)}"
+            f"&confirm={urllib.parse.quote(confirm_token)}"
+        )
+        with opener.open(confirm_url) as response:
+            if _is_download_response(response):
+                _write_response_to_file(response, destination)
+                return
+
+    form_data = _extract_confirm_form(html_text)
+    if form_data is None:
+        raise RuntimeError(
+            "Impossible de recuperer le formulaire de confirmation Google Drive. "
+            "Installez 'gdown' ou reessayez plus tard."
+        )
+
+    action, inputs = form_data
+    inputs.setdefault("id", file_id)
+    request_url = urllib.parse.urljoin("https://drive.google.com/", action)
+    request_url = f"{request_url}?{urllib.parse.urlencode(inputs)}"
+    with opener.open(request_url) as response:
+        if not _is_download_response(response):
+            raise RuntimeError(
+                "Google Drive a renvoye une page HTML inattendue au lieu du fichier."
+            )
+        _write_response_to_file(response, destination)
+
+
 def download_file(file_id: str, destination: Path) -> None:
     try:
         import gdown
-    except ImportError as exc:
-        raise SystemExit(
-            "Le paquet 'gdown' est requis. Installez d'abord les dependances avec "
-            "'python3 -m pip install -r requirements.txt'."
-        ) from exc
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url=url, output=str(destination), quiet=False, fuzzy=True)
+    except ImportError:
+        print(
+            "[warn] Le paquet 'gdown' est absent. Utilisation du telechargement "
+            "Google Drive de secours base sur la bibliotheque standard."
+        )
+        _download_with_google_drive_fallback(file_id, destination)
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        url = f"https://drive.google.com/uc?id={file_id}"
+        try:
+            gdown.download(url=url, output=str(destination), quiet=False, fuzzy=True)
+        except TypeError as exc:
+            if "fuzzy" not in str(exc):
+                raise
+            gdown.download(url=url, output=str(destination), quiet=False)
     if not destination.exists():
         raise FileNotFoundError(f"Le telechargement a echoue: {destination}")
 

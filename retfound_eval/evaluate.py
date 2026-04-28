@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,43 @@ from .device import choose_device
 from .metrics import compute_metrics
 from .model import load_checkpoint
 from .plots import save_confusion_matrix, save_roc_curves
+
+
+def _iterate_with_progress(loader, description: str, progress: str):
+    if progress == "none":
+        yield from loader
+        return
+
+    if progress == "bar":
+        yield from tqdm(
+            loader,
+            desc=description,
+            leave=False,
+            dynamic_ncols=True,
+            ascii=True,
+            file=sys.stdout,
+        )
+        return
+
+    total = len(loader) if hasattr(loader, "__len__") else None
+    if total is None:
+        print(f"{description}: starting evaluation")
+        for batch_index, batch in enumerate(loader, start=1):
+            if batch_index == 1 or batch_index % 10 == 0:
+                print(f"{description}: processed {batch_index} batches")
+            yield batch
+        print(f"{description}: completed")
+        return
+
+    print(f"{description}: 0/{total} batches (0%)")
+    next_milestone = 10
+    for batch_index, batch in enumerate(loader, start=1):
+        yield batch
+        percent = int(batch_index * 100 / total)
+        if percent >= next_milestone or batch_index == total:
+            print(f"{description}: {batch_index}/{total} batches ({percent}%)")
+            while next_milestone <= percent:
+                next_milestone += 10
 
 
 def _json_default(value):
@@ -46,6 +84,7 @@ def run_evaluation(
     save_plots: bool = True,
     split_mode: str = "all",
     external_only: bool = False,
+    progress: str = "plain",
 ) -> dict[str, Any]:
     """Evaluate one source checkpoint on one target dataset."""
 
@@ -82,10 +121,10 @@ def run_evaluation(
     image_splits: list[str] = []
 
     with torch.no_grad():
-        for images, labels, paths, batch_splits in tqdm(
+        for images, labels, paths, batch_splits in _iterate_with_progress(
             loader,
-            desc=f"{train_dataset} -> {eval_dataset}",
-            leave=False,
+            description=f"{train_dataset} -> {eval_dataset}",
+            progress=progress,
         ):
             images = images.to(device)
             logits = model(images)

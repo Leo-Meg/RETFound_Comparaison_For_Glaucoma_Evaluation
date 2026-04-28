@@ -45,6 +45,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--no-plots", action="store_true")
+    parser.add_argument(
+        "--progress",
+        choices=("plain", "bar", "none"),
+        default="plain",
+        help="Affichage de progression: texte simple, barre tqdm, ou aucun.",
+    )
     return parser.parse_args()
 
 
@@ -80,6 +86,7 @@ def main() -> None:
                 save_plots=not args.no_plots,
                 split_mode=split_mode,
                 external_only=args.external_only,
+                progress=args.progress,
             )
             all_metrics.append(result["metrics"])
 

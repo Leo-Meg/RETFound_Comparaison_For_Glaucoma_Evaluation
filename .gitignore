@@ -8,3 +8,6 @@ dataset/*
 !dataset/.gitkeep
 check/*
 !check/.gitkeep
+
+# Environnement virtuel local
+RETFound/
