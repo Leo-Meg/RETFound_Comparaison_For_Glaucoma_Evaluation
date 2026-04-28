@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+results/*
+!results/.gitkeep
+
+# Fichiers lourds locaux
+dataset/*
+!dataset/.gitkeep
+check/*
+!check/.gitkeep

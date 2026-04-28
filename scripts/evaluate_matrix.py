@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Run the full source-checkpoint x target-dataset evaluation matrix."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from retfound_eval.config import SPLITS, dataset_names
+from retfound_eval.evaluate import run_evaluation
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Matrice d'evaluation RETFound sur Glaucoma_fundus et PAPILA."
+    )
+    parser.add_argument("--train-datasets", nargs="+", default=dataset_names())
+    parser.add_argument("--eval-datasets", nargs="+", default=dataset_names())
+    parser.add_argument(
+        "--external-only",
+        action="store_true",
+        help="Ignore les diagonales train_dataset == eval_dataset.",
+    )
+    parser.add_argument("--repo-root", default=".")
+    parser.add_argument("--check-dir", default="check")
+    parser.add_argument("--output-dir", default="results/glaucoma_matrix")
+    parser.add_argument("--splits", nargs="+", default=list(SPLITS))
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--device", default="auto")
+    parser.add_argument("--no-plots", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    all_metrics = []
+
+    for train_dataset in args.train_datasets:
+        for eval_dataset in args.eval_datasets:
+            if args.external_only and train_dataset == eval_dataset:
+                continue
+
+            print(f"\n=== {train_dataset} -> {eval_dataset} ===")
+            result = run_evaluation(
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                repo_root=args.repo_root,
+                check_dir=args.check_dir,
+                output_dir=output_dir,
+                splits=tuple(args.splits),
+                batch_size=args.batch_size,
+                num_workers=args.num_workers,
+                device_name=args.device,
+                save_plots=not args.no_plots,
+            )
+            all_metrics.append(result["metrics"])
+
+    summary = pd.DataFrame(all_metrics)
+    summary_path = output_dir / "summary_metrics.csv"
+    summary.to_csv(summary_path, index=False)
+
+    print("\nMatrice terminee")
+    print(f"Resume: {summary_path}")
+    if not summary.empty:
+        columns = [
+            "train_dataset",
+            "eval_dataset",
+            "n_images",
+            "accuracy",
+            "auroc_macro_ovr",
+            "f1_macro",
+            "cohen_kappa",
+            "composite_f1_auc_kappa",
+        ]
+        print(summary[columns].to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
